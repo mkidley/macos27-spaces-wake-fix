@@ -59,7 +59,10 @@ var screenAsleep = false
 var sessionActive = true
 
 func log(_ message: String) { NSLog("[SpacesWakeFix] %@", message) }
-func unlockedConsoleSession() -> Bool {
+// Called only by main-queue reminder checks. Newer SDKs require an explicit
+// Sendable annotation; enforce the queue requirement before reading shared state.
+@Sendable func unlockedConsoleSession() -> Bool {
+    dispatchPrecondition(condition: .onQueue(.main))
     guard sessionActive, !screenAsleep,
           let session = CGSessionCopyCurrentDictionary() as? [String: Any],
           session[kCGSessionOnConsoleKey as String] as? Bool == true else { return false }
