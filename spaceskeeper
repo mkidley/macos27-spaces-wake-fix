@@ -1,0 +1,37 @@
+#!/bin/bash
+set -euo pipefail
+base="$HOME/Library/Application Support/SpacesWakeFix"
+helper="$base/spaces-wake-fix"
+case "${1:-help}" in
+    help|--help|-h)
+        cat <<'HELP'
+SpacesKeeper — assignment-repair milestone (native interface follows live validation)
+  spaceskeeper save             Explicitly save current assignments and Desktop layout
+  spaceskeeper restore          Restore and verify saved assignments; never move windows
+  spaceskeeper status           Print current/saved configuration and diagnostics as JSON
+  spaceskeeper auto on|off       Enable/disable automatic assignment restoration
+  spaceskeeper dock on|off       Independently enable/disable the Dock workaround
+  spaceskeeper delay SECONDS     Set assignment-restoration delay (1–60 seconds)
+  spaceskeeper display on|off    Restore after display reconfiguration
+  spaceskeeper wake on|off       Restore after system wake
+  spaceskeeper login on|off      Restore at helper login/startup
+  spaceskeeper logs              Stream the existing helper's Console log
+  spaceskeeper rollback         Restore the previous installed helper binary
+HELP
+        exit 0 ;;
+    save) command=--save-assignments ;;
+    restore) command=--restore-assignments ;;
+    status|diagnostics) command=--spaces-status ;;
+    auto) command=--assignment-repair ;;
+    dock) command=--dock-workaround ;;
+    delay) command=--restoration-delay ;;
+    display) command=--restore-on-display ;;
+    wake) command=--restore-after-wake ;;
+    login) command=--restore-at-login ;;
+    logs) exec /usr/bin/log stream --style compact --predicate 'subsystem == "org.spaceswakefix.agent"' ;;
+    rollback) exec "$base/rollback-helper.sh" ;;
+    *) echo 'Unknown command. Run spaceskeeper help.' >&2; exit 1 ;;
+esac
+shift
+[[ -x "$helper" ]] || { echo 'Run ./install.sh from the repository first.' >&2; exit 1; }
+exec "$helper" "$command" "$@"

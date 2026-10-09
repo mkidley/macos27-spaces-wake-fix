@@ -3,6 +3,10 @@ set -euo pipefail
 umask 077
 [[ "$(uname -s)" == Darwin ]] || { echo 'This project requires macOS.' >&2; exit 1; }
 [[ $EUID -ne 0 ]] || { echo 'Run as your logged-in user, without sudo.' >&2; exit 1; }
+if [[ -f "$HOME/Library/Application Support/SpacesKeeper/native-owner.json" ]]; then
+    echo 'SpacesKeeper manages repairs now. Use install-app.sh to update the app, or its Settings to return to the old agent.' >&2
+    exit 1
+fi
 delay=4
 reminder=true
 while [[ $# -gt 0 ]]; do
@@ -28,14 +32,19 @@ domain="gui/$(id -u)"
 build_dir="$(mktemp -d "${TMPDIR:-/tmp}/spaces-wake-fix.XXXXXX")"
 trap 'rm -rf -- "$build_dir"' EXIT
 echo 'Compiling the local wake helper…'
-/usr/bin/xcrun swiftc -swift-version 5 -module-cache-path "$build_dir/modules" -O "$source_dir/Sources/main.swift" -o "$build_dir/spaces-wake-fix"
+/usr/bin/xcrun swiftc -swift-version 5 -module-cache-path "$build_dir/modules" -O "$source_dir/Sources/main.swift" "$source_dir/Sources/Assignments.swift" -o "$build_dir/spaces-wake-fix"
 # Compile and validate before stopping any existing installation.
 if /bin/launchctl print "$domain/$label" >/dev/null 2>&1; then
     /bin/launchctl bootout "$domain/$label"
 fi
 /bin/mkdir -p "$base" "$HOME/Library/LaunchAgents"
 /bin/chmod 700 "$base"
+if [[ -x "$base/spaces-wake-fix" ]]; then
+    /usr/bin/install -m 700 "$base/spaces-wake-fix" "$base/spaces-wake-fix.previous"
+fi
 /usr/bin/install -m 700 "$build_dir/spaces-wake-fix" "$base/spaces-wake-fix"
+/usr/bin/install -m 700 "$source_dir/spaceskeeper" "$base/spaceskeeper"
+/usr/bin/install -m 700 "$source_dir/rollback-helper.sh" "$base/rollback-helper.sh"
 /usr/bin/install -m 700 "$source_dir/uninstall.sh" "$base/uninstall.sh"
 "$base/spaces-wake-fix" --configure "$delay" "$reminder"
 new_plist="$build_dir/agent.plist"
@@ -53,5 +62,5 @@ if ! /bin/launchctl bootstrap "$domain" "$plist"; then
     echo "Could not start the agent. Files remain for diagnosis; rerun installer or ./uninstall.sh." >&2
     exit 1
 fi
-echo "Installed. Dock will restart $delay seconds after system wake. Monthly reminder: $reminder."
+echo "Installed. Dock will restart $delay seconds after the desktop is ready and wake/display changes have settled. Monthly reminder: $reminder."
 echo 'Uninstall: "$HOME/Library/Application Support/SpacesWakeFix/uninstall.sh"'
